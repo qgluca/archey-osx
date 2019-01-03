@@ -24,6 +24,12 @@ if [ -z "$ipAddress" ]; then
 fi
 
 case $versionShort in
+    10.14)
+        versionString="Mojave"
+        ;;
+    10.13)
+        versionString="High Sierra"
+        ;;
     10.12)
         versionString="Sierra"
         ;;
