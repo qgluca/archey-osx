@@ -15,11 +15,11 @@ versionShort="${versionMajor}.${versionMinor}"
 
 ## Version of OS X
 case $versionShort in
-    10.12)
-        version="macOS $(sw_vers -productVersion)"
+    10.12|10.13|10.14)
+        version="macOS ${versionNumber}"
         ;;
     *)
-        version="OS X $(sw_vers -productVersion)"
+        version="OS X ${versionNumber}"
         ;;
 esac
 
