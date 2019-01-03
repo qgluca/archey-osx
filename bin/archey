@@ -6,9 +6,6 @@
 user=$(whoami)
 hostname=$(hostname | sed 's/.local//g')
 
-## Version of OS X
-version="OS X $(sw_vers -productVersion)"
-
 ## Version name
 versionNumber=$(sw_vers -productVersion) # Finds version number
 
@@ -16,6 +13,15 @@ versionMajor=`echo $versionNumber | cut -d'.' -f1`
 versionMinor=`echo $versionNumber | cut -d'.' -f2`
 versionShort="${versionMajor}.${versionMinor}"
 
+## Version of OS X
+case $versionShort in
+    10.12)
+        version="macOS $(sw_vers -productVersion)"
+        ;;
+    *)
+        version="OS X $(sw_vers -productVersion)"
+        ;;
+esac
 
 ## en1 or en0 should contain the ip address
 ipAddress=`ipconfig getifaddr en1`
@@ -110,7 +116,6 @@ fi
 # Output
 
 echo -e "
-
 ${GREEN}                  ###
 ${GREEN}                ####                  User: $user
 ${GREEN}                ###                   Hostname: $hostname
@@ -124,6 +129,5 @@ ${PURPLE}     ######################           CPU: $cpu
 ${PURPLE}      ####################            Memory: $ram
 ${BLUE}        ################              Disk Used: $disk
 ${BLUE}         ####     #####               Internal IP: $ipAddress
-
 "
 tput sgr0
