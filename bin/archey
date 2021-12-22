@@ -206,6 +206,14 @@ if [ "${opt_localip}" = t ]; then
 	fieldlist[${#fieldlist[@]}]="${textColor}Local IPv4:${normal} ${localip}${normal}"
 fi
 
+## Shift elements to fill the image from the bottom
+if [ ${#fieldlist[@]} -lt 13 ]; then
+    shiftnum=$(( 13-${#fieldlist[@]} ))
+    for i in $(seq 1 $shiftnum); do
+        fieldlist=("" "${fieldlist[@]}")
+    done
+fi
+
 ## Print
 echo -e "
 ${GREEN#}                  ###                 ${fieldlist[0]}
