@@ -1,6 +1,52 @@
 #!/bin/bash
 
-# Variables
+# Get the command line options
+opt_color=f
+opt_offline=f
+for arg in "$@"
+do
+  case "${arg}" in
+    -c|--color)
+      opt_color=t
+      ;;
+    -o|--offline)
+        opt_offline=t
+        ;;
+    -l|--localip)
+		opt_localip=t
+      ;;
+    -h|--help)
+      echo "Archey OS X 0.1.2"
+      echo
+      echo "Usage: `basename "$0"` [options]"
+      echo
+      echo "  -c --color     Turn color on."
+      echo "  -o --offline   Disable the IP address check."
+      echo "  -l --localip   Show local IP adddress"
+      exit 0
+      ;;
+    *)
+      echo "Unknown argument: $1" 1>&2
+      echo "For help, use: $0 --help" 1>&2
+      exit 1
+      ;;
+  esac
+done
+
+
+# Add a -c option to enable classic color logo
+if [[ "${opt_color}" = t ]]; then
+  RED=$(tput       setaf 1 2>/dev/null)
+  GREEN=$(tput     setaf 2 2>/dev/null)
+  YELLOW=$(tput    setaf 3 2>/dev/null)
+  BLUE=$(tput      setaf 4 2>/dev/null)
+  PURPLE=$(tput    setaf 5 2>/dev/null)
+  LRED=$(tput     setaf 203 2>/dev/null)
+  textColor=$(tput setaf 6 2>/dev/null)
+  normal=$(tput    sgr0 2>/dev/null)
+fi
+
+
 
 ## Names
 user=$(whoami)
@@ -12,24 +58,18 @@ versionNumber=$(sw_vers -productVersion) # Finds version number
 versionMajor=`echo $versionNumber | cut -d'.' -f1`
 versionMinor=`echo $versionNumber | cut -d'.' -f2`
 versionShort="${versionMajor}.${versionMinor}"
-
-## Version of OS X
-case $versionShort in
-    10.12|10.13|10.14)
-        version="macOS ${versionNumber}"
-        ;;
-    *)
-        version="OS X ${versionNumber}"
-        ;;
-esac
-
-## en1 or en0 should contain the ip address
-ipAddress=`ipconfig getifaddr en1`
-if [ -z "$ipAddress" ]; then
-    ipAddress=`ipconfig getifaddr en0`
-fi
+version="$(sw_vers -productName) ${versionShort}"
 
 case $versionShort in
+    12.1)
+        versionString="Monterey"
+        ;;
+    11.6)
+        versionString="Big Sur"
+        ;;
+    10.15)
+        versionString="Catalina"
+        ;;
     10.14)
         versionString="Mojave"
         ;;
@@ -87,47 +127,99 @@ uptime=$(uptime | sed 's/.*up \([^,]*\), .*/\1/')
 shell="$SHELL"
 
 ## Terminal
-terminal="$TERM"
-
-## Number of packages installed via Homebrew
-packages="`brew list -l --formula| wc -l | awk '{print $1 }'`"
+terminal="$TERM ${TERM_PROGRAM//_/ }"
 
 ## CPU Type
-cpu=$(sysctl -n machdep.cpu.brand_string)
+# removes (R) and (TM) from the CPU name so it fits in a standard 80 window
+cpu=$(echo "$(sysctl -n machdep.cpu.brand_string)" | awk '$1=$1' | sed 's/([A-Z]\{1,2\})//g')
 
 ## Memory Amount
-mem=$(sysctl -n hw.memsize)
-ram="$((mem/1073741824)) GB"
+ram="$(( $(sysctl -n hw.memsize) / 1024 ** 3  )) GB"
 
 ## Disk usage
-disk=`df | head -2 | tail -1 | awk '{print $5}'`
+diskspace=`df | head -2 | tail -1 | awk '{print $2}'`
+diskavailable=`df | head -2 | tail -1 | awk '{print $4}'`
+disk="$(( ($diskspace-$diskavailable)*100/$diskspace ))%"
 
-# Add a -c option to enable classic color logo
-if [[ $1 == "-c" ]]; then
-  GREEN='\033[00;32m'
-  YELLOW='\033[00;33m'
-  LRED='\033[01;31m'
-  RED='\033[00;31m'
-  PURPLE='\033[00;35m'
-  CYAN='\033[00;36m'
-  BLUE='\033[00;34m'
+## Battery
+battery=$(ioreg -c AppleSmartBattery -r | awk '$1~/Capacity/{c[$1]=$3} END{OFMT="%.2f%"; max=c["\"MaxCapacity\""]; if (max>0) { print 100*c["\"CurrentCapacity\""]/max;} }')
+
+# IPv4 and IPv6 address detection
+if [[ "${opt_offline}" = f ]]; then
+    ipfile4="${HOME}/.archey-ipv4"
+    ipfile6="${HOME}/.archey-ipv6"
+    if [ -a "$ipfile4" ] && test `find "$ipfile4" -mmin -360`; then
+        while read -r line; do
+            V4="$line"
+        done < "$ipfile4"
+    else
+        if V4=$(dig @resolver4.opendns.com myip.opendns.com +short -4 2>/dev/null); then
+            echo $V4 > "$ipfile4"
+        fi
+    fi
+    if [ -a "$ipfile6" ] && test `find "$ipfile6" -mmin -360`; then
+        while read -r line; do
+            V6="$line"
+        done < "$ipfile6"
+    else
+        if V6=$(dig @resolver1.ipv6-sandbox.opendns.com AAAA myip.opendns.com +short -6 2>/dev/null); then
+            echo $V6 > "$ipfile6"
+        fi
+    fi
 fi
 
-# Output
+if [[ "${opt_localip}" = t ]]; then
+	# Get the interface used for the default route
+	activeadapter=$(route -n get 0.0.0.0 | awk '/interface: / {print $2}')
+	# Now get the IP address assigned to that interface
+	localip=$(ifconfig ${activeadapter} | awk '/inet / {print $2}')
+fi
 
+
+## Output
+fieldlist[${#fieldlist[@]}]="${textColor}User:${normal} ${user}${normal}"
+fieldlist[${#fieldlist[@]}]="${textColor}Hostname:${normal} ${hostname}${normal}"
+fieldlist[${#fieldlist[@]}]="${textColor}Version:${normal} ${version} ${versionString}${normal}"
+fieldlist[${#fieldlist[@]}]="${textColor}Kernel:${normal} ${kernel}${normal}"
+fieldlist[${#fieldlist[@]}]="${textColor}Uptime:${normal} ${uptime}${normal}"
+fieldlist[${#fieldlist[@]}]="${textColor}Shell:${normal} ${shell}${normal}"
+# Hide terminal if there are too many lines
+if [[ ! -z $battery ]] && [ "${opt_offline}" = f ] && [ -z "$V6" ]; then
+fieldlist[${#fieldlist[@]}]="${textColor}Terminal:${normal} ${terminal}${normal}"
+fi
+fieldlist[${#fieldlist[@]}]="${textColor}CPU:${normal} ${cpu}${normal}"
+fieldlist[${#fieldlist[@]}]="${textColor}Memory:${normal} ${ram}${normal}"
+fieldlist[${#fieldlist[@]}]="${textColor}Disk Used:${normal} ${disk}${normal}"
+if [[ ! -z $battery ]]; then
+    fieldlist[${#fieldlist[@]}]="${textColor}Battery:${normal} ${battery}%${normal}"
+fi
+# Texts had to be shortend to fit in 80 window
+if [ "${opt_offline}" = f ]; then
+    if [ ! -z "$V4" ]; then
+      fieldlist[${#fieldlist[@]}]="${textColor}Public IPv4:${normal} ${V4}${normal}"
+    fi
+    if [ ! -z "$V6" ]; then
+      fieldlist[${#fieldlist[@]}]="${textColor}Public IPv6:${normal} ${V6}${normal}"
+    fi
+fi
+if [ "${opt_localip}" = t ]; then
+	fieldlist[${#fieldlist[@]}]="${textColor}Local IPv4:${normal} ${localip}${normal}"
+fi
+
+## Print
 echo -e "
-${GREEN}                  ###
-${GREEN}                ####                  User: $user
-${GREEN}                ###                   Hostname: $hostname
-${GREEN}       ####### ##  #######            Version: $version $versionString
-${YELLOW}     ######################           Kernel: $kernel
-${YELLOW}    #####################             Uptime: $uptime
-${LRED}    ####################              Shell: $shell
-${RED}    ####################              Terminal: $terminal
-${RED}    #####################             Packages: $packages
-${PURPLE}     ######################           CPU: $cpu
-${PURPLE}      ####################            Memory: $ram
-${BLUE}        ################              Disk Used: $disk
-${BLUE}         ####     #####               Internal IP: $ipAddress
+${GREEN#}                  ###                 ${fieldlist[0]}
+${GREEN#}                ####                  ${fieldlist[1]}
+${GREEN#}                ###                   ${fieldlist[2]}
+${GREEN#}       ####### ##  #######            ${fieldlist[3]}
+${YELLOW}     ######################           ${fieldlist[4]}
+${YELLOW}    #####################             ${fieldlist[5]}
+${LRED# }    ####################              ${fieldlist[6]}
+${RED#  }    ####################              ${fieldlist[7]}
+${RED#  }    #####################             ${fieldlist[8]}
+${PURPLE}     ######################           ${fieldlist[9]}
+${PURPLE}      ####################            ${fieldlist[10]}
+${BLUE# }        ################              ${fieldlist[11]}
+${BLUE# }         ####     #####               ${fieldlist[12]}
 "
 tput sgr0
